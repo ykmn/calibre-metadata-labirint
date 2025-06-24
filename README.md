@@ -8,7 +8,7 @@
 и обложки по магазину [labirint.ru](https://www.labirint.ru/).
 
 > [!CAUTION]
-> Данные будут найдены если книга есть в магазине - это не глобальный поиск!
+> Данные будут найдены, если книга есть в магазине - это не глобальный поиск!
 
 
 
@@ -16,16 +16,16 @@
 
 ### вариант для пользователя
 
-1. Скачайте ZIP-архив
+1. Скачайте [ZIP-архив](https://github.com/ykmn/calibre-metadata-labirint/releases/download/0.1.16/calibre-metadata-labirint-0.1.16.zip)
 
 2. Добавьте его в плагины Calibre (**Параметры - Плагины - Загрузить плагин из файла**)
 
 ### вариант для разработчика
 
 ```
+cd ~\Projects
 git clone https://github.com/ykmn/calibre-metadata-Labirint
-cd calibre-metadata-Labirint
-calibre-customize -b .
+calibre-customize -b ~\Projects\calibre-metadata-Labirint\.
 ```
 
 
@@ -54,19 +54,19 @@ calibre-customize -b .
 
 ### Загрузить метаданные
 
-![[images/metadata-search.png]]
+![](images/metadata-search.png)
 
 ### Загрузить обложку
 
-![[images/metadata-cover.png]]
+![](images/metadata-cover.png)
 
 ### Карточка книги
 
-![[images/metadata-results.png]]
+![](images/metadata-results.png)
 
 ## Версии
 
-v0.1.16 2025-06-24 Первая публичная версия
+v0.1.16 - 2025-06-24 - Первая публичная версия
 
 
 [buymecoffee]: https://www.tbank.ru/cf/58Tlv2umMfW
