@@ -64,6 +64,8 @@ calibre-customize -b ~\Projects\calibre-metadata-Labirint\.
 
 ![](images/metadata-results.png)
 
+[![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
+
 ## Версии
 
 v0.1.16 - 2025-06-24 - Первая публичная версия
