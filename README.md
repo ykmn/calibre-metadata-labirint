@@ -16,7 +16,7 @@
 
 ### вариант для пользователя
 
-1. Скачайте [ZIP-архив](https://github.com/ykmn/calibre-metadata-labirint/releases/download/0.1.16/calibre-metadata-labirint-0.1.16.zip)
+1. Скачайте [ZIP-архив](https://github.com/ykmn/calibre-metadata-labirint/releases/download/0.1.16/calibre-metadata-labirint-0.1.17.zip)
 
 2. Добавьте его в плагины Calibre (**Параметры - Плагины - Загрузить плагин из файла**)
 
@@ -68,8 +68,8 @@ calibre-customize -b ~\Projects\calibre-metadata-Labirint\.
 
 ## Версии
 
-v0.1.16 - 2025-06-24 - Первая публичная версия
-
+v0.1.16 - 2025-06-24 - Первая публичная версия.
+v0.1.17 - 2025-06-25 - Добавлен парсинг жанра со страницы книги.
 
 [buymecoffee]: https://www.tbank.ru/cf/58Tlv2umMfW
 [buymecoffeebadge]: https://img.shields.io/badge/buy%20me%20a%20coffee-donate-blue.svg?style=for-the-badge

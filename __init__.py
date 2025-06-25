@@ -24,12 +24,25 @@ LABIRINT_BOOK_URL = "https://www.labirint.ru/books/{id}/"
 LABIRINT_CONCURRENCY_SIZE = 5
 PROVIDER_NAME = "Labirint Books"
 PROVIDER_ID = "labirint"
-PROVIDER_VERSION = (0, 1, 16, 10)
+PROVIDER_VERSION = (0, 1, 17, 3)
 PROVIDER_AUTHOR = "Roman Ermakov, adapted by Grok"
 
 def normalize_string(s):
     """Нормализует строку: приводит к нижнему регистру и удаляет лишние пробелы."""
     return ' '.join(s.lower().strip().split())
+
+def format_genre(genre):
+    """Форматирует жанр: заглавная буква в начале и после точки, удаляет запятую в конце."""
+    if not genre:
+        return genre
+    # Удалить запятую и пробел в конце
+    genre = re.sub(r',\s*$', '', genre.strip())
+    # Разбить на предложения (по точке с пробелом)
+    sentences = re.split(r'\.\s+', genre)
+    # Привести каждое предложение к нижнему регистру, затем сделать заглавной первую букву
+    formatted_sentences = [s.lower().capitalize() for s in sentences if s]
+    # Объединить предложения, добавляя точку и пробел
+    return '. '.join(formatted_sentences) if len(formatted_sentences) > 1 else formatted_sentences[0]
 
 def calculate_relevance(book_title, book_authors, query_title, query_authors):
     """Вычисляет релевантность книги на основе совпадения заголовка и авторов."""
@@ -78,7 +91,7 @@ class LabirintBookSearcher:
                 book = self.book_parser.parse_search_result(card, log)
                 if book and book['id'] and book['url']:
                     books.append(book)
-                    log.info(f'Added book: {book["title"] or "No title"}, Authors: {book["authors"]}, URL: {book["url"]}, Cover: {book["cover"]}')
+                    log.info(f'Added book: {book["title"] or "No title"}, Authors: {book["search_authors"]}, URL: {book["url"]}, Cover: {book["cover"]}')
                 else:
                     log.warning(f'Skipped invalid book data: ID={book.get("id", "")}, URL={book.get("url", "")}, Title={book.get("title", "")}')
         
@@ -150,6 +163,7 @@ class LabirintBookHtmlParser:
             'id': '',
             'url': '',
             'cover': '',
+            'search_authors': [],
             'authors': [],
             'publisher': '',
             'series': '',
@@ -158,6 +172,7 @@ class LabirintBookHtmlParser:
             'description': '',
             'language': '',
             'pubdate': '',
+            'tags': [],
             'similarity': 0.0,
             'source': {'id': PROVIDER_ID, 'description': PROVIDER_NAME, 'link': LABIRINT_BASE_URL}
         }
@@ -191,9 +206,12 @@ class LabirintBookHtmlParser:
                 log.warning('Cover not found or invalid (base64 or empty)')
             log.info(f'Extracted cover URL: {book["cover"]}')
 
-            author_elements = card.xpath('.//div[contains(@class, "product-card__author")]//a/text()')
-            book['authors'] = [self.reorder_author_name(a.strip()) for a in author_elements if a.strip()]
-            log.info(f'Extracted authors from search: {book["authors"]}')
+            author_div = card.xpath('.//div[contains(@class, "product-card__author")]')
+            log.debug(f'Author div HTML: {etree.tostring(author_div[0], encoding="unicode") if author_div else "No author div"}')
+            author_elements = card.xpath('.//div[contains(@class, "product-card__author")]//a/@title')
+            book['search_authors'] = [self.reorder_author_name(a.strip()) for a in author_elements if a.strip()]
+            book['authors'] = book['search_authors'].copy()
+            log.info(f'Extracted authors from search: {book["search_authors"]}')
 
             publisher_element = card.xpath('.//div[contains(@class, "product-card__info")]//a[contains(@class, "product-card__info-item") and not(contains(@class, "product-card__info-series"))]')
             book['publisher'] = publisher_element[0].text.strip() if publisher_element else ''
@@ -215,10 +233,10 @@ class LabirintBookHtmlParser:
             return book
         return book
 
-    def parse_book_details(self, book, book_content, log):
+    def parse_book_details(self, book, book_detail_content, log):
         try:
-            log.debug(f'Book page HTML: {book_content[:200]}...')
-            html = etree.HTML(book_content)
+            log.debug(f'Book page HTML: {book_detail_content[:200]}...')
+            html = etree.HTML(book_detail_content)
             if html is None or html.xpath is None:
                 log.error('Error: Detail page HTML not parsed')
                 return book
@@ -229,8 +247,9 @@ class LabirintBookHtmlParser:
 
             # Извлечение авторов
             author_elements = html.xpath('.//div[@id="characteristics" and contains(@class, "flex")]//div[contains(.//div, "Автор")]//a/text()')
-            book['authors'] = [self.reorder_author_name(a.strip()) for a in author_elements if a.strip()]
-            log.info(f'Extracted authors from characteristics: {book["authors"]}')
+            authors_from_details = [self.reorder_author_name(a.strip()) for a in author_elements if a.strip()]
+            book['authors'] = authors_from_details if authors_from_details else book['search_authors']
+            log.info(f'Extracted authors from characteristics: {authors_from_details}, Final authors: {book["authors"]}')
 
             # Извлечение ISBN
             isbn_elements = html.xpath('.//meta[@itemprop="isbn"]/@content')
@@ -283,6 +302,16 @@ class LabirintBookHtmlParser:
             else:
                 book['pubdate'] = ''
                 log.info(f'No valid pubdate found for book: {book["title"] or "No title"}')
+
+            # Извлечение жанра
+            genre_elements = html.xpath('.//div[@itemscope and @itemtype="http://schema.org/BreadcrumbList"]//span[@itemprop="itemListElement"]//span[@itemprop="name"]/text()')
+            if genre_elements:
+                formatted_genre = format_genre(genre_elements[-1].strip())
+                book['tags'] = [formatted_genre] if formatted_genre else []
+                log.info(f'Extracted genre: {book["tags"]}')
+            else:
+                book['tags'] = []
+                log.info(f'No genre found for book: {book["title"] or "No title"}')
         except Exception as e:
             log.error(f'Error parsing book details: {e}')
         return book
@@ -296,7 +325,7 @@ class LabirintBooks(Source):
     minimum_calibre_version = (5, 0, 0)
     capabilities = frozenset(['identify', 'cover'])
     touched_fields = frozenset([
-        'title', 'authors', 'comments', 'publisher',
+        'title', 'authors', 'comments', 'publisher', 'tags',
         'identifier:isbn', 'rating', 'identifier:' + PROVIDER_ID, 'series', 'language', 'pubdate'
     ])
 
@@ -403,7 +432,7 @@ class LabirintBooks(Source):
         
         filtered_books = []
         for book in books:
-            relevance = calculate_relevance(book['title'], book['authors'], title or '', authors or [])
+            relevance = calculate_relevance(book['title'], book['search_authors'], title or '', authors or [])
             book['similarity'] = relevance
             if relevance >= 0.3:
                 filtered_books.append(book)
@@ -421,13 +450,15 @@ class LabirintBooks(Source):
                 if mi.cover and labirint_id:
                     self.cache_identifier_to_cover_url(labirint_id, mi.cover)
                 self.clean_downloaded_metadata(mi)
-                log.info(f'Adding to result_queue: {mi.title or "No title"}, ID: {labirint_id}, Relevance: {book["similarity"]:.2f}')
+                log.info(f'Adding to result_queue: {mi.title or "No title"}, ID: {labirint_id}, Authors: {mi.authors}, Tags: {mi.tags}, Relevance: {book["similarity"]:.2f}')
                 result_queue.put(mi)
-        log.debug(f'Added to result_queue: {[(mi.title, mi.identifiers.get(PROVIDER_ID)) for mi in result_queue.queue]}')
+        log.debug(f'Added to result_queue: {[(mi.title, mi.identifiers.get(PROVIDER_ID), mi.authors, mi.tags) for mi in result_queue.queue]}')
 
     def to_metadata(self, book, log):
         title = book['title'] or 'Unknown Title'
-        mi = Metadata(title, book['authors'])
+        authors = book['authors'] or ['Unknown']
+        log.debug(f'Creating metadata for title={title}, authors={authors}')
+        mi = Metadata(title, authors)
         if book['id']:
             mi.identifiers = {PROVIDER_ID: book['id']}
         mi.url = book['url']
@@ -438,11 +469,12 @@ class LabirintBooks(Source):
         mi.comments = book['description']
         mi.rating = book['rating']
         mi.language = book['language']
+        mi.tags = book['tags']
         if book.get('pubdate'):
             try:
                 mi.pubdate = datetime.strptime(book['pubdate'], '%Y')
                 log.info(f'Set pubdate in metadata: {book["pubdate"]}')
             except ValueError:
                 log.warning(f'Invalid pubdate format: {book["pubdate"]}')
-        log.info(f'Parsed book metadata: {title}, Authors: {book["authors"]}, Pubdate: {book.get("pubdate", "")}')
+        log.info(f'Parsed book metadata: {title}, Authors: {authors}, Tags: {mi.tags}, Pubdate: {book.get("pubdate", "")}')
         return mi
