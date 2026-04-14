@@ -24,25 +24,29 @@ LABIRINT_BOOK_URL = "https://www.labirint.ru/books/{id}/"
 LABIRINT_CONCURRENCY_SIZE = 5
 PROVIDER_NAME = "Labirint Books"
 PROVIDER_ID = "labirint"
-PROVIDER_VERSION = (0, 1, 17, 3)
+PROVIDER_VERSION = (0, 1, 17, 7)
 PROVIDER_AUTHOR = "Roman Ermakov, adapted by Grok"
 
 def normalize_string(s):
     """Нормализует строку: приводит к нижнему регистру и удаляет лишние пробелы."""
     return ' '.join(s.lower().strip().split())
 
-def format_genre(genre):
-    """Форматирует жанр: заглавная буква в начале и после точки, удаляет запятую в конце."""
+def format_genre(genre, log):
+    """Форматирует жанр: заглавная буква в начале, остальные строчные, удаляет запятую и пробел."""
     if not genre:
+        log.debug(f'format_genre: Empty genre received')
         return genre
-    # Удалить запятую и пробел в конце
-    genre = re.sub(r',\s*$', '', genre.strip())
-    # Разбить на предложения (по точке с пробелом)
-    sentences = re.split(r'\.\s+', genre)
-    # Привести каждое предложение к нижнему регистру, затем сделать заглавной первую букву
-    formatted_sentences = [s.lower().capitalize() for s in sentences if s]
-    # Объединить предложения, добавляя точку и пробел
-    return '. '.join(formatted_sentences) if len(formatted_sentences) > 1 else formatted_sentences[0]
+    log.debug(f'format_genre input: {genre!r}')
+    # Удалить завершающие запятые, точки, пробелы, точки с запятой
+    genre = re.sub(r'[,\.\s;]+$', '', genre.strip())
+    # Нормализовать пробелы
+    genre = ' '.join(genre.split())
+    # Привести к нижнему регистру
+    genre = genre.lower()
+    # Сделать заглавной только первую букву строки
+    result = genre[0].upper() + genre[1:] if genre else genre
+    log.debug(f'format_genre output: {result!r}')
+    return result
 
 def calculate_relevance(book_title, book_authors, query_title, query_authors):
     """Вычисляет релевантность книги на основе совпадения заголовка и авторов."""
@@ -189,7 +193,8 @@ class LabirintBookHtmlParser:
             log.info(f'Extracted URL: {book["url"]}')
 
             img_element = card.xpath('.//a[contains(@class, "product-card__img")]//img')
-            log.debug(f'Cover img HTML: {etree.tostring(img_element[0], encoding="unicode") if img_element else "No img found"}')
+            cover_html = etree.tostring(img_element[0], encoding="unicode") if img_element else ""
+            log.debug(f'Cover img HTML: {cover_html}')
             data_src = card.xpath('.//a[contains(@class, "product-card__img")]//img/@data-src')
             src = card.xpath('.//a[contains(@class, "product-card__img")]//img/@src')
             cover_url = data_src[0].strip() if data_src else (src[0].strip() if src else '')
@@ -207,7 +212,8 @@ class LabirintBookHtmlParser:
             log.info(f'Extracted cover URL: {book["cover"]}')
 
             author_div = card.xpath('.//div[contains(@class, "product-card__author")]')
-            log.debug(f'Author div HTML: {etree.tostring(author_div[0], encoding="unicode") if author_div else "No author div"}')
+            author_html = etree.tostring(author_div[0], encoding="unicode") if author_div else "No author div"
+            log.debug(f'Author div HTML: {author_html}')
             author_elements = card.xpath('.//div[contains(@class, "product-card__author")]//a/@title')
             book['search_authors'] = [self.reorder_author_name(a.strip()) for a in author_elements if a.strip()]
             book['authors'] = book['search_authors'].copy()
@@ -230,7 +236,6 @@ class LabirintBookHtmlParser:
             log.info(f'Extracted rating: {book["rating"]}')
         except Exception as e:
             log.error(f'Error parsing search result: {e}')
-            return book
         return book
 
     def parse_book_details(self, book, book_detail_content, log):
@@ -306,7 +311,8 @@ class LabirintBookHtmlParser:
             # Извлечение жанра
             genre_elements = html.xpath('.//div[@itemscope and @itemtype="http://schema.org/BreadcrumbList"]//span[@itemprop="itemListElement"]//span[@itemprop="name"]/text()')
             if genre_elements:
-                formatted_genre = format_genre(genre_elements[-1].strip())
+                formatted_genre = format_genre(genre_elements[-1].strip(), log)
+                log.debug(f'Raw genre: {genre_elements[-1]!r}, Formatted genre: {formatted_genre!r}')
                 book['tags'] = [formatted_genre] if formatted_genre else []
                 log.info(f'Extracted genre: {book["tags"]}')
             else:
@@ -457,7 +463,7 @@ class LabirintBooks(Source):
     def to_metadata(self, book, log):
         title = book['title'] or 'Unknown Title'
         authors = book['authors'] or ['Unknown']
-        log.debug(f'Creating metadata for title={title}, authors={authors}')
+        log.debug(f'Creating metadata for book: {title}')
         mi = Metadata(title, authors)
         if book['id']:
             mi.identifiers = {PROVIDER_ID: book['id']}
